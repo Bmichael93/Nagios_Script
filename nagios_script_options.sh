@@ -1,23 +1,41 @@
 #!/bin/bash
 # Created by: Benjamin Michael
 # Date: August 2014
+# Updated 1/18/2016 for Raspberry Pi 2 and latest Nagios/Plugins
 user="$USER"
 echo "Using sudo powers -- Activate!"
 
 function install_nagios() {
 	cd /etc/
-	sudo sed -i '1i192.168.1.3	raspberrypi.net	raspberrypi' hosts
+	sudo sed -i '1i192.168.1.5	raspberrypi2.net	raspberrypi2' hosts
 	cd ~
 	echo "Updating repository list..."
 	sudo apt-get update -y
 	sudo apt-get install build-essential apache2 apache2-utils php5-gd wget libgd2-xpm-dev libapache2-mod-php5 sendmail daemon -y
-	sudo useradd nagios
+    #adding nagios user
+	echo "Add your nagios user!"
+	if [ $(id -u) -eq 0 ]; then
+	read -p "Enter username : " username
+	read -s -p "Enter password : " password
+	egrep "^$username" /etc/passwd >/dev/null
+	if [ $? -eq 0 ]; then
+		echo "$username exists!"
+		exit 1
+	else
+		pass=$(perl -e 'print crypt($ARGV[0], "password")' $password)
+		useradd -m -p $pass $username
+		[ $? -eq 0 ] && echo "User has been added to system!" || echo "Failed to add a user!"
+	fi
+    else
+	echo "Only root may add a user to the system"
+	exit 2
+    fi
 	sudo groupadd nagcmd
 	sudo usermod -a -G nagcmd nagios
 	echo "Grabing Nagios Core from the internet..."
-	sudo wget http://prdownloads.sourceforge.net/sourceforge/nagios/nagios-4.0.8.tar.gz
-	sudo tar -xvzf nagios-4.0.8.tar.gz
-	cd nagios-4.0.8/
+	sudo wget http://prdownloads.sourceforge.net/sourceforge/nagios/nagios-4.1.1.tar.gz
+	sudo tar -xvzf nagios-4.1.1.tar.gz
+	cd nagios-4.1.1/
 	echo "Configuring Nagios Core..."
 	sudo ./configure --with-nagios-group=nagios --with-command-group=nagcmd --with-mail=/usr/bin/sendmail
 	sudo make all
@@ -25,15 +43,12 @@ function install_nagios() {
 	sudo make install-init
 	sudo make install-config
 	sudo make install-commandmode
-	sudo make install-webconf
-	cd ..
-	sudo cp -R contrib/eventhandlers/ /usr/local/nagios/libexec/
-	sudo chown -R nagios:nagios /usr/local/nagios/libexec/eventhandlers
+	sudo /usr/bin/install -c -m 644 sample-config/httpd.conf /etc/apache2/sites-enabled/nagios.conf
 	cd ~
 	echo "Grabing Nagios Plugins from the internet..."
-	sudo wget http://nagios-plugins.org/download/nagios-plugins-2.0.3.tar.gz
-	sudo tar -xvzf nagios-plugins-2.0.3.tar.gz
-	cd nagios-plugins-2.0.3/
+	sudo wget http://nagios-plugins.org/download/nagios-plugins-2.1.1.tar.gz
+	sudo tar -xvzf nagios-plugins-2.1.1.tar.gz
+	cd nagios-plugins-2.1.1/
 	sudo ./configure --with-nagios-user=nagios --with-nagios-group=nagios
 	sudo make
 	sudo make install
@@ -53,7 +68,7 @@ function install_nagios() {
 	sudo service apache2 restart
 	echo "Open http://IPADDRESS/nagios or http://FQDN/nagios in your browser and enter username and password created"
 	echo "Type in Nagios Web Login Password"
-	echo "To change your web admin password from default, run this: sudo htpasswd -cm /usr/local/nagios/etc/htpasswd.users nagiosadmin"
+	sudo htpasswd -cm /usr/local/nagios/etc/htpasswd.users nagiosadmin
 	echo "To fix manual admin emails, add www-data to nagios and nagcmd groups in /etc/groups"    
 	  
 }
@@ -73,7 +88,7 @@ function configure_nagios() {
 	read GMAILUSERNAME
 	echo "Enter your Gmail Password: "
 	read -s GMAILPASS 
-	sudo sed -i '1i192.168.1.3	raspberrypi.net	raspberrypi' hosts
+	sudo sed -i '1i192.168.1.5	raspberrypi2.net	raspberrypi2' hosts
 	sudo sed -i '/mailhub=mail/d' /etc/ssmtp/ssmtp.conf
 	sudo sed -i '9s/.*/mailhub=smtp.gmail.com:587/' /etc/ssmtp/ssmtp.conf
 	sudo echo "AuthUser=$GMAILUSERNAME" >> /etc/ssmtp/ssmtp.conf
